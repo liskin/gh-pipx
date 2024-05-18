@@ -1,0 +1,56 @@
+name: gh-pipx
+description: >-
+  Install Python commands using pipx
+branding:
+  icon: code
+  color: yellow
+inputs:
+  packages:
+    required: true
+    description: >-
+      Space-separated list of package specifications
+  cache-date-format:
+    required: false
+    default: '%Y-%m'
+    description: >-
+      Date format string used as cache key
+      (default is %Y-%m, so new cache is written at least once a month)
+runs:
+  using: composite
+  steps:
+    - name: Prepare pip cache key
+      id: cache-key
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        CACHE_DATE_FORMAT: ${{ inputs.cache-date-format }}
+      shell: sh
+      run: |
+        echo "dir=$(pip cache dir)" >> $GITHUB_OUTPUT
+
+        # GHA writes caches on the first miss and then never updates them again;
+        # force updating the cache at least once a month.
+        date --utc +date="${CACHE_DATE_FORMAT:?}" >> $GITHUB_OUTPUT
+
+        packages_hash="$(echo "${PACKAGES:?}" | sha1sum | awk '{ print $1 }')"
+        : "${packages_hash:?}"
+        echo "packages_hash=$packages_hash" >> $GITHUB_OUTPUT
+
+    - name: Restore pip cache
+      id: cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.cache-key.outputs.dir }}
+        key: gh-pipx-${{ steps.cache-key.outputs.packages_hash }}-${{ runner.os }}-${{ steps.cache-key.outputs.date }}
+        restore-keys: |
+          gh-pipx-${{ steps.cache-key.outputs.packages_hash }}-${{ runner.os }}-
+
+    - name: Install dependencies
+      shell: sh
+      run: |
+        pipx install ${{ inputs.packages }}
+
+    - name: Save pip cache
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.cache-key.outputs.dir }}
+        key: ${{ steps.cache.outputs.cache-primary-key }}
