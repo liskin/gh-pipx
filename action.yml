@@ -50,6 +50,7 @@ runs:
         pipx install ${{ inputs.packages }}
 
     - name: Save pip cache
+      if: steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
         path: ${{ steps.cache-key.outputs.dir }}
